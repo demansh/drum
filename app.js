@@ -1,16 +1,16 @@
+import { INSTRUMENTS, createDefaultParams, createNoiseBuffer } from "./instruments.js";
+import { createKnob } from "./knob.js";
+import { clamp, fromPosition, toPosition } from "./param-scale.js";
+
 const STEP_COUNT = 16;
 const SCHEDULER_INTERVAL_MS = 25;
 const SCHEDULE_AHEAD_SECONDS = 0.1;
 const STORAGE_KEY = "drum16.state";
+const DEFAULT_VOLUME = 0.8;
+const BPM_RANGE = { min: 60, max: 200 };
+const SWING_RANGE = { min: 0, max: 60 };
 
-const TRACKS = [
-  { id: "kick", name: "Kick", key: "1", play: playKick },
-  { id: "snare", name: "Snare", key: "2", play: playSnare },
-  { id: "clap", name: "Clap", key: "3", play: playClap },
-  { id: "hat", name: "Hi-Hat", key: "4", play: playClosedHat },
-  { id: "openhat", name: "Open Hat", key: "5", play: playOpenHat },
-  { id: "tom", name: "Tom", key: "6", play: playTom },
-];
+const TRACKS = INSTRUMENTS;
 
 const DEFAULT_PATTERN = {
   kick: [0, 4, 8, 12],
@@ -21,8 +21,9 @@ const DEFAULT_PATTERN = {
 const state = {
   bpm: 120,
   swing: 0,
-  pattern: TRACKS.map(() => new Array(STEP_COUNT).fill(false)),
-  volumes: TRACKS.map(() => 0.8),
+  pattern: createEmptyPattern(),
+  volumes: TRACKS.map(() => DEFAULT_VOLUME),
+  params: TRACKS.map(createDefaultParams),
 };
 
 const audio = {
@@ -51,8 +52,11 @@ const elements = {
   randomButton: document.getElementById("random-button"),
   shareButton: document.getElementById("share-button"),
   stepButtons: [],
-  volumeInputs: [],
 };
+
+function createEmptyPattern() {
+  return TRACKS.map(() => new Array(STEP_COUNT).fill(false));
+}
 
 function ensureAudio() {
   if (!audio.context) {
@@ -81,109 +85,22 @@ function ensureAudio() {
   return audio.context;
 }
 
-function createNoiseBuffer(context) {
-  const length = context.sampleRate;
-  const buffer = context.createBuffer(1, length, context.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < length; i++) {
-    data[i] = Math.random() * 2 - 1;
-  }
-  return buffer;
-}
-
-function createNoiseSource(context) {
-  const source = context.createBufferSource();
-  source.buffer = audio.noiseBuffer;
-  return source;
-}
-
-function createEnvelope(context, time, peak, decaySeconds) {
-  const gain = context.createGain();
-  gain.gain.setValueAtTime(peak, time);
-  gain.gain.exponentialRampToValueAtTime(0.001, time + decaySeconds);
-  return gain;
-}
-
-function playKick(context, destination, time) {
-  const oscillator = context.createOscillator();
-  const envelope = createEnvelope(context, time, 1, 0.5);
-  oscillator.frequency.setValueAtTime(150, time);
-  oscillator.frequency.exponentialRampToValueAtTime(40, time + 0.15);
-  oscillator.connect(envelope).connect(destination);
-  oscillator.start(time);
-  oscillator.stop(time + 0.5);
-}
-
-function playSnare(context, destination, time) {
-  const noise = createNoiseSource(context);
-  const noiseFilter = context.createBiquadFilter();
-  noiseFilter.type = "highpass";
-  noiseFilter.frequency.value = 1000;
-  const noiseEnvelope = createEnvelope(context, time, 0.7, 0.2);
-  noise.connect(noiseFilter).connect(noiseEnvelope).connect(destination);
-  noise.start(time);
-  noise.stop(time + 0.2);
-
-  const body = context.createOscillator();
-  body.type = "triangle";
-  body.frequency.setValueAtTime(180, time);
-  const bodyEnvelope = createEnvelope(context, time, 0.6, 0.1);
-  body.connect(bodyEnvelope).connect(destination);
-  body.start(time);
-  body.stop(time + 0.1);
-}
-
-function playClap(context, destination, time) {
-  const filter = context.createBiquadFilter();
-  filter.type = "bandpass";
-  filter.frequency.value = 1500;
-  filter.Q.value = 0.8;
-  filter.connect(destination);
-
-  [0, 0.01, 0.02].forEach((offset, index) => {
-    const burstTime = time + offset;
-    const isTail = index === 2;
-    const decay = isTail ? 0.2 : 0.01;
-    const noise = createNoiseSource(context);
-    const envelope = createEnvelope(context, burstTime, 1, decay);
-    noise.connect(envelope).connect(filter);
-    noise.start(burstTime);
-    noise.stop(burstTime + decay);
+function triggerTrack(trackIndex, time) {
+  const context = ensureAudio();
+  TRACKS[trackIndex].play(context, {
+    destination: audio.trackGains[trackIndex],
+    time: time ?? context.currentTime,
+    noiseBuffer: audio.noiseBuffer,
+    params: state.params[trackIndex],
   });
 }
 
-function playHat(context, destination, time, decaySeconds) {
-  const noise = createNoiseSource(context);
-  const filter = context.createBiquadFilter();
-  filter.type = "highpass";
-  filter.frequency.value = 7000;
-  const envelope = createEnvelope(context, time, 0.4, decaySeconds);
-  noise.connect(filter).connect(envelope).connect(destination);
-  noise.start(time);
-  noise.stop(time + decaySeconds);
-}
-
-function playClosedHat(context, destination, time) {
-  playHat(context, destination, time, 0.05);
-}
-
-function playOpenHat(context, destination, time) {
-  playHat(context, destination, time, 0.3);
-}
-
-function playTom(context, destination, time) {
-  const oscillator = context.createOscillator();
-  const envelope = createEnvelope(context, time, 0.8, 0.35);
-  oscillator.frequency.setValueAtTime(220, time);
-  oscillator.frequency.exponentialRampToValueAtTime(100, time + 0.3);
-  oscillator.connect(envelope).connect(destination);
-  oscillator.start(time);
-  oscillator.stop(time + 0.35);
-}
-
-function triggerTrack(trackIndex, time) {
-  const context = ensureAudio();
-  TRACKS[trackIndex].play(context, audio.trackGains[trackIndex], time ?? context.currentTime);
+function previewTrack(trackIndex) {
+  try {
+    triggerTrack(trackIndex);
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 function getStepDurationSeconds() {
@@ -270,41 +187,90 @@ function togglePlayback() {
   }
 }
 
+function positionToHexByte(position) {
+  return Math.round(clamp(position, 0, 1) * 255)
+    .toString(16)
+    .padStart(2, "0");
+}
+
+function encodePattern() {
+  return state.pattern
+    .map((steps) =>
+      steps
+        .reduce((bits, isActive, index) => (isActive ? bits | (1 << index) : bits), 0)
+        .toString(16)
+        .padStart(4, "0"),
+    )
+    .join("");
+}
+
+function encodeSound() {
+  return TRACKS.map((track, trackIndex) =>
+    [
+      positionToHexByte(state.volumes[trackIndex]),
+      ...track.params.map((spec) => positionToHexByte(toPosition(state.params[trackIndex][spec.id], spec))),
+    ].join(""),
+  ).join("");
+}
+
 function encodeState() {
-  const rows = state.pattern.map((steps) =>
-    steps
-      .reduce((bits, isActive, index) => (isActive ? bits | (1 << index) : bits), 0)
-      .toString(16)
-      .padStart(4, "0"),
-  );
-  return [state.bpm, state.swing, rows.join("")].join("-");
+  return [state.bpm, state.swing, encodePattern(), encodeSound()].join("-");
+}
+
+function decodePattern(patternText) {
+  if (patternText.length !== TRACKS.length * 4) {
+    return null;
+  }
+  return TRACKS.map((_, trackIndex) => {
+    const bits = parseInt(patternText.slice(trackIndex * 4, trackIndex * 4 + 4), 16);
+    return Array.from({ length: STEP_COUNT }, (_, step) => (bits & (1 << step)) !== 0);
+  });
+}
+
+function decodeSound(soundText) {
+  const expectedLength = TRACKS.reduce((total, track) => total + (1 + track.params.length) * 2, 0);
+  if (!soundText || soundText.length !== expectedLength) {
+    return null;
+  }
+  let offset = 0;
+  const readPosition = () => {
+    const position = parseInt(soundText.slice(offset, offset + 2), 16) / 255;
+    offset += 2;
+    return position;
+  };
+  const volumes = [];
+  const params = TRACKS.map((track) => {
+    volumes.push(readPosition());
+    return Object.fromEntries(track.params.map((spec) => [spec.id, fromPosition(readPosition(), spec)]));
+  });
+  return { volumes, params };
 }
 
 function decodeState(encoded) {
-  const match = /^(\d{2,3})-(\d{1,2})-([0-9a-f]+)$/i.exec(encoded ?? "");
+  const match = /^(\d{2,3})-(\d{1,2})-([0-9a-f]+)(?:-([0-9a-f]+))?$/i.exec(encoded ?? "");
   if (!match) {
     return null;
   }
-  const [, bpmText, swingText, rowsText] = match;
-  if (rowsText.length !== TRACKS.length * 4) {
+  const [, bpmText, swingText, patternText, soundText] = match;
+  const pattern = decodePattern(patternText);
+  if (!pattern) {
     return null;
   }
-  const bpm = clamp(Number(bpmText), 60, 200);
-  const swing = clamp(Number(swingText), 0, 60);
-  const pattern = TRACKS.map((_, trackIndex) => {
-    const bits = parseInt(rowsText.slice(trackIndex * 4, trackIndex * 4 + 4), 16);
-    return Array.from({ length: STEP_COUNT }, (_, step) => (bits & (1 << step)) !== 0);
-  });
-  return { bpm, swing, pattern };
-}
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
+  return {
+    bpm: clamp(Number(bpmText), BPM_RANGE.min, BPM_RANGE.max),
+    swing: clamp(Number(swingText), SWING_RANGE.min, SWING_RANGE.max),
+    pattern,
+    ...decodeSound(soundText),
+  };
 }
 
 function persistState() {
   const encoded = encodeState();
-  history.replaceState(null, "", `#${encoded}`);
+  try {
+    history.replaceState(null, "", `#${encoded}`);
+  } catch (error) {
+    console.warn("Unable to update URL", error);
+  }
   try {
     localStorage.setItem(STORAGE_KEY, encoded);
   } catch (error) {
@@ -318,14 +284,11 @@ function loadInitialState() {
     return fromHash;
   }
   try {
-    const fromStorage = decodeState(localStorage.getItem(STORAGE_KEY));
-    if (fromStorage) {
-      return fromStorage;
-    }
+    return decodeState(localStorage.getItem(STORAGE_KEY));
   } catch (error) {
     console.warn("Unable to read state from localStorage", error);
+    return null;
   }
-  return null;
 }
 
 function applyDefaultPattern() {
@@ -336,50 +299,97 @@ function applyDefaultPattern() {
   });
 }
 
+function createTrackHeader(track, trackIndex, knobsPanel) {
+  const header = document.createElement("div");
+  header.className = "track__header";
+
+  const nameButton = document.createElement("button");
+  nameButton.type = "button";
+  nameButton.className = "track__name";
+  nameButton.textContent = track.name;
+  nameButton.addEventListener("click", () => previewTrack(trackIndex));
+
+  const volumeInput = document.createElement("input");
+  volumeInput.type = "range";
+  volumeInput.min = "0";
+  volumeInput.max = "1";
+  volumeInput.step = "0.01";
+  volumeInput.value = String(state.volumes[trackIndex]);
+  volumeInput.className = "track__volume";
+  volumeInput.setAttribute("aria-label", `${track.name} volume`);
+  volumeInput.addEventListener("input", () => setVolume(trackIndex, Number(volumeInput.value)));
+  volumeInput.addEventListener("change", persistState);
+
+  const soundToggle = document.createElement("button");
+  soundToggle.type = "button";
+  soundToggle.className = "track__toggle";
+  soundToggle.textContent = "⚙︎";
+  soundToggle.setAttribute("aria-label", `${track.name} sound settings`);
+  soundToggle.setAttribute("aria-controls", knobsPanel.id);
+  soundToggle.setAttribute("aria-expanded", "false");
+  soundToggle.addEventListener("click", () => {
+    const isExpanded = knobsPanel.hidden;
+    knobsPanel.hidden = !isExpanded;
+    soundToggle.setAttribute("aria-expanded", String(isExpanded));
+  });
+
+  header.append(nameButton, volumeInput, soundToggle);
+  return header;
+}
+
+function createKnobsPanel(track, trackIndex) {
+  const panel = document.createElement("div");
+  panel.className = "track__knobs";
+  panel.id = `knobs-${track.id}`;
+  panel.hidden = true;
+  track.params.forEach((spec) => {
+    const knob = createKnob({
+      spec,
+      value: state.params[trackIndex][spec.id],
+      onInput: (value) => {
+        state.params[trackIndex][spec.id] = value;
+      },
+      onCommit: () => {
+        persistState();
+        if (!transport.isPlaying) {
+          previewTrack(trackIndex);
+        }
+      },
+    });
+    panel.append(knob.element);
+  });
+  return panel;
+}
+
+function createStepsContainer(track, trackIndex) {
+  const container = document.createElement("div");
+  container.className = "track__steps";
+  const stepRow = [];
+  for (let step = 0; step < STEP_COUNT; step++) {
+    const stepButton = document.createElement("button");
+    stepButton.type = "button";
+    stepButton.className = "step";
+    stepButton.classList.toggle("step--beat", step % 4 === 0);
+    stepButton.setAttribute("aria-label", `${track.name} step ${step + 1}`);
+    stepButton.addEventListener("click", () => toggleStep(trackIndex, step));
+    stepRow.push(stepButton);
+    container.append(stepButton);
+  }
+  elements.stepButtons.push(stepRow);
+  return container;
+}
+
 function renderSequencer() {
   const fragment = document.createDocumentFragment();
   TRACKS.forEach((track, trackIndex) => {
     const row = document.createElement("div");
     row.className = "track";
-
-    const header = document.createElement("div");
-    header.className = "track__header";
-
-    const nameButton = document.createElement("button");
-    nameButton.type = "button";
-    nameButton.className = "track__name";
-    nameButton.textContent = track.name;
-    nameButton.addEventListener("click", () => triggerTrack(trackIndex));
-    header.append(nameButton);
-
-    const volumeInput = document.createElement("input");
-    volumeInput.type = "range";
-    volumeInput.min = "0";
-    volumeInput.max = "1";
-    volumeInput.step = "0.01";
-    volumeInput.value = String(state.volumes[trackIndex]);
-    volumeInput.className = "track__volume";
-    volumeInput.setAttribute("aria-label", `${track.name} volume`);
-    volumeInput.addEventListener("input", () => setVolume(trackIndex, Number(volumeInput.value)));
-    elements.volumeInputs.push(volumeInput);
-    header.append(volumeInput);
-    row.append(header);
-
-    const stepsContainer = document.createElement("div");
-    stepsContainer.className = "track__steps";
-    const stepRow = [];
-    for (let step = 0; step < STEP_COUNT; step++) {
-      const stepButton = document.createElement("button");
-      stepButton.type = "button";
-      stepButton.className = "step";
-      stepButton.classList.toggle("step--beat", step % 4 === 0);
-      stepButton.setAttribute("aria-label", `${track.name} step ${step + 1}`);
-      stepButton.addEventListener("click", () => toggleStep(trackIndex, step));
-      stepRow.push(stepButton);
-      stepsContainer.append(stepButton);
-    }
-    row.append(stepsContainer);
-    elements.stepButtons.push(stepRow);
+    const knobsPanel = createKnobsPanel(track, trackIndex);
+    row.append(
+      createTrackHeader(track, trackIndex, knobsPanel),
+      createStepsContainer(track, trackIndex),
+      knobsPanel,
+    );
     fragment.append(row);
   });
   elements.sequencer.replaceChildren(fragment);
@@ -408,7 +418,7 @@ function toggleStep(trackIndex, step) {
   renderPattern();
   persistState();
   if (isActive && !transport.isPlaying) {
-    triggerTrack(trackIndex);
+    previewTrack(trackIndex);
   }
 }
 
@@ -420,7 +430,7 @@ function setVolume(trackIndex, volume) {
 }
 
 function clearPattern() {
-  state.pattern = TRACKS.map(() => new Array(STEP_COUNT).fill(false));
+  state.pattern = createEmptyPattern();
   renderPattern();
   persistState();
 }
@@ -465,22 +475,22 @@ function handleKeydown(event) {
   }
   const trackIndex = TRACKS.findIndex((track) => track.key === event.key);
   if (trackIndex !== -1) {
-    triggerTrack(trackIndex);
+    previewTrack(trackIndex);
   }
 }
 
 function bindControls() {
   elements.playButton.addEventListener("click", togglePlayback);
   elements.bpmInput.addEventListener("input", () => {
-    state.bpm = clamp(Number(elements.bpmInput.value), 60, 200);
+    state.bpm = clamp(Number(elements.bpmInput.value), BPM_RANGE.min, BPM_RANGE.max);
     renderControls();
-    persistState();
   });
   elements.swingInput.addEventListener("input", () => {
-    state.swing = clamp(Number(elements.swingInput.value), 0, 60);
+    state.swing = clamp(Number(elements.swingInput.value), SWING_RANGE.min, SWING_RANGE.max);
     renderControls();
-    persistState();
   });
+  elements.bpmInput.addEventListener("change", persistState);
+  elements.swingInput.addEventListener("change", persistState);
   elements.clearButton.addEventListener("click", clearPattern);
   elements.randomButton.addEventListener("click", randomizePattern);
   elements.shareButton.addEventListener("click", shareLink);

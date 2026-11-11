@@ -6,8 +6,9 @@
 
 - 6 дорожек: Kick, Snare, Clap, Hi-Hat, Open Hat, Tom
 - BPM 60–200, swing, громкость каждой дорожки
-- Clear / Random, сохранение паттерна в `localStorage`
-- Share — ссылка с паттерном в URL hash
+- Крутилки звука у каждого инструмента (⚙): pitch, tone, decay и т.д.
+- Clear / Random, сохранение паттерна и звука в `localStorage`
+- Share — ссылка с паттерном и настройками звука в URL hash
 - Горячие клавиши: `Space` — play/stop, `1`–`6` — проиграть звук
 
 ## Локальный запуск

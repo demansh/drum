@@ -156,6 +156,104 @@ input[type="range"] {
 
 .track__volume {
   flex: 1 1 auto;
+  min-width: 0;
+}
+
+.track__toggle {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: var(--step);
+  color: var(--muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.track__toggle[aria-expanded="true"] {
+  background: var(--accent);
+  color: #111;
+}
+
+.track__knobs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 10px;
+}
+
+.track__knobs[hidden] {
+  display: none;
+}
+
+.knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 68px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.knob__dial {
+  --position: 0.5;
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 225deg,
+    var(--accent) calc(var(--position) * 270deg),
+    var(--step) 0 270deg,
+    transparent 0
+  );
+  cursor: ns-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.knob__dial::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.4);
+}
+
+.knob__dial::after {
+  content: "";
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  width: 3px;
+  height: 14px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--text);
+  transform-origin: 50% 17px;
+  transform: rotate(calc(-135deg + var(--position) * 270deg));
+}
+
+.knob__dial:focus-visible {
+  box-shadow: 0 0 0 2px var(--playhead);
+}
+
+.knob__label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.knob__value {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .track__steps {
@@ -266,9 +364,15 @@ input[type="range"] {
 
   .track {
     display: grid;
-    grid-template-columns: 200px 1fr;
+    grid-template-columns: 240px 1fr;
     align-items: center;
-    gap: 12px;
+    gap: 8px 12px;
+  }
+
+  .track__knobs {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    gap: 20px;
   }
 
   .track__steps {

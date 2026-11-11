@@ -4,12 +4,15 @@
   --step: #33363f;
   --step-beat: #3d414c;
   --accent: #ff6b3d;
+  --accent-hover: #ff8a63;
   --playhead: #ffd23d;
   --text: #e8e8ea;
   --muted: #8b8e98;
+  --gap: 6px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
+  -webkit-text-size-adjust: 100%;
 }
 
 * {
@@ -18,34 +21,36 @@
 
 body {
   margin: 0;
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 16px;
+  min-height: 100dvh;
+}
+
+button,
+input {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .machine {
-  width: min(100%, 960px);
+  width: 100%;
+  min-height: 100dvh;
   background: var(--panel);
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 20px 60px rgb(0 0 0 / 0.5);
+  padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
 }
 
 .machine__header {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .machine__title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   letter-spacing: 0.15em;
   color: var(--accent);
+  text-align: center;
 }
 
 .machine__footer {
@@ -55,11 +60,26 @@ body {
   text-align: center;
 }
 
+.hint--keyboard {
+  display: none;
+}
+
 .controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+.controls > #play-button {
+  grid-column: span 6;
+}
+
+.controls > .control {
+  grid-column: span 3;
+}
+
+.controls > .button:not(#play-button) {
+  grid-column: span 2;
 }
 
 .control {
@@ -70,78 +90,89 @@ body {
   gap: 4px;
 }
 
-.control input[type="range"] {
+input[type="range"] {
+  width: 100%;
+  height: 28px;
+  margin: 0;
   accent-color: var(--accent);
-  width: 120px;
 }
 
 .button {
+  min-height: 44px;
   background: var(--step);
   color: var(--text);
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 14px;
   font: inherit;
   cursor: pointer;
   transition: background 0.1s;
 }
 
-.button:hover {
-  background: var(--step-beat);
-}
-
 .button--primary {
   background: var(--accent);
   color: #111;
   font-weight: 600;
-  min-width: 90px;
-}
-
-.button--primary:hover {
-  background: #ff8a63;
+  font-size: 1.1rem;
+  min-height: 52px;
 }
 
 .sequencer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  overflow-x: auto;
+  gap: 16px;
 }
 
 .track {
-  display: grid;
-  grid-template-columns: 90px 70px repeat(16, minmax(28px, 1fr));
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.track__header {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  min-width: 640px;
+  gap: 12px;
 }
 
 .track__name {
+  flex: 0 0 auto;
+  min-width: 96px;
+  min-height: 36px;
   background: none;
   border: none;
   color: var(--text);
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
-  padding: 4px 0;
+  padding: 0;
 }
 
-.track__name:hover {
+.track__name:active {
   color: var(--accent);
 }
 
 .track__volume {
-  width: 100%;
-  accent-color: var(--accent);
+  flex: 1 1 auto;
+}
+
+.track__steps {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: var(--gap);
 }
 
 .step {
   aspect-ratio: 1;
+  min-width: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--step);
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
   transition: transform 0.05s, background 0.1s;
 }
 
@@ -160,4 +191,92 @@ body {
 
 .step--current.step--active {
   transform: scale(0.9);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hint--touch {
+    display: none;
+  }
+
+  .hint--keyboard {
+    display: inline;
+  }
+
+  .button:hover {
+    background: var(--step-beat);
+  }
+
+  .button--primary:hover {
+    background: var(--accent-hover);
+  }
+
+  .track__name:hover {
+    color: var(--accent);
+  }
+}
+
+@media (min-width: 720px) {
+  body {
+    display: grid;
+    place-items: center;
+    padding: 24px;
+  }
+
+  .machine {
+    width: min(100%, 1040px);
+    min-height: auto;
+    padding: 24px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgb(0 0 0 / 0.5);
+  }
+
+  .machine__header {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .machine__title {
+    font-size: 1.5rem;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .button--primary {
+    min-width: 100px;
+    min-height: 44px;
+    font-size: 1rem;
+  }
+
+  .control input[type="range"] {
+    width: 120px;
+  }
+
+  .sequencer {
+    gap: 8px;
+  }
+
+  .track {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .track__steps {
+    grid-template-columns: repeat(16, 1fr);
+    gap: 4px;
+  }
+
+  .step {
+    border-radius: 6px;
+  }
 }

@@ -2,7 +2,8 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#22242b" />
     <title>Drum Machine</title>
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -27,7 +28,8 @@
       </header>
       <section id="sequencer" class="sequencer" aria-label="Sequencer"></section>
       <footer class="machine__footer">
-        Space — play/stop · клавиши 1–6 — проиграть звук · клик по названию — превью
+        <span class="hint--keyboard">Space — play/stop · клавиши 1–6 — проиграть звук · клик по названию — превью</span>
+        <span class="hint--touch">Тап по названию дорожки — превью звука</span>
       </footer>
     </main>
     <script type="module" src="app.js"></script>

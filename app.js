@@ -342,12 +342,15 @@ function renderSequencer() {
     const row = document.createElement("div");
     row.className = "track";
 
+    const header = document.createElement("div");
+    header.className = "track__header";
+
     const nameButton = document.createElement("button");
     nameButton.type = "button";
     nameButton.className = "track__name";
-    nameButton.textContent = `${track.key}. ${track.name}`;
+    nameButton.textContent = track.name;
     nameButton.addEventListener("click", () => triggerTrack(trackIndex));
-    row.append(nameButton);
+    header.append(nameButton);
 
     const volumeInput = document.createElement("input");
     volumeInput.type = "range";
@@ -359,8 +362,11 @@ function renderSequencer() {
     volumeInput.setAttribute("aria-label", `${track.name} volume`);
     volumeInput.addEventListener("input", () => setVolume(trackIndex, Number(volumeInput.value)));
     elements.volumeInputs.push(volumeInput);
-    row.append(volumeInput);
+    header.append(volumeInput);
+    row.append(header);
 
+    const stepsContainer = document.createElement("div");
+    stepsContainer.className = "track__steps";
     const stepRow = [];
     for (let step = 0; step < STEP_COUNT; step++) {
       const stepButton = document.createElement("button");
@@ -370,8 +376,9 @@ function renderSequencer() {
       stepButton.setAttribute("aria-label", `${track.name} step ${step + 1}`);
       stepButton.addEventListener("click", () => toggleStep(trackIndex, step));
       stepRow.push(stepButton);
-      row.append(stepButton);
+      stepsContainer.append(stepButton);
     }
+    row.append(stepsContainer);
     elements.stepButtons.push(stepRow);
     fragment.append(row);
   });

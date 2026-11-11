@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Drum Machine</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="machine">
+      <header class="machine__header">
+        <h1 class="machine__title">DRUM-16</h1>
+        <div class="controls">
+          <button id="play-button" class="button button--primary" type="button">▶ Play</button>
+          <label class="control">
+            <span>BPM <output id="bpm-value">120</output></span>
+            <input id="bpm-input" type="range" min="60" max="200" value="120" />
+          </label>
+          <label class="control">
+            <span>Swing <output id="swing-value">0</output>%</span>
+            <input id="swing-input" type="range" min="0" max="60" value="0" />
+          </label>
+          <button id="clear-button" class="button" type="button">Clear</button>
+          <button id="random-button" class="button" type="button">Random</button>
+          <button id="share-button" class="button" type="button">Share</button>
+        </div>
+      </header>
+      <section id="sequencer" class="sequencer" aria-label="Sequencer"></section>
+      <footer class="machine__footer">
+        Space — play/stop · клавиши 1–6 — проиграть звук · клик по названию — превью
+      </footer>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

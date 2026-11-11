@@ -1,0 +1,163 @@
+:root {
+  --bg: #15161a;
+  --panel: #22242b;
+  --step: #33363f;
+  --step-beat: #3d414c;
+  --accent: #ff6b3d;
+  --playhead: #ffd23d;
+  --text: #e8e8ea;
+  --muted: #8b8e98;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.machine {
+  width: min(100%, 960px);
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.5);
+}
+
+.machine__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.machine__title {
+  margin: 0;
+  font-size: 1.5rem;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+}
+
+.machine__footer {
+  margin-top: 16px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8rem;
+  color: var(--muted);
+  gap: 4px;
+}
+
+.control input[type="range"] {
+  accent-color: var(--accent);
+  width: 120px;
+}
+
+.button {
+  background: var(--step);
+  color: var(--text);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.button:hover {
+  background: var(--step-beat);
+}
+
+.button--primary {
+  background: var(--accent);
+  color: #111;
+  font-weight: 600;
+  min-width: 90px;
+}
+
+.button--primary:hover {
+  background: #ff8a63;
+}
+
+.sequencer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.track {
+  display: grid;
+  grid-template-columns: 90px 70px repeat(16, minmax(28px, 1fr));
+  align-items: center;
+  gap: 4px;
+  min-width: 640px;
+}
+
+.track__name {
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.track__name:hover {
+  color: var(--accent);
+}
+
+.track__volume {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.step {
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 6px;
+  background: var(--step);
+  cursor: pointer;
+  transition: transform 0.05s, background 0.1s;
+}
+
+.step--beat {
+  background: var(--step-beat);
+}
+
+.step--active {
+  background: var(--accent);
+}
+
+.step--current {
+  outline: 2px solid var(--playhead);
+  outline-offset: -2px;
+}
+
+.step--current.step--active {
+  transform: scale(0.9);
+}

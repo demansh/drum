@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#22242b" />
     <title>Drum Machine</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="style.css?v=__VERSION__" />
   </head>
   <body>
     <main class="machine">
@@ -29,10 +30,12 @@
       </header>
       <section id="sequencer" class="sequencer" aria-label="Sequencer"></section>
       <section class="string-pad" aria-label="String">
-        <button id="string-button" class="string-pad__button" type="button">
-          <span class="string-pad__label">String</span>
-          <span id="string-note" class="string-pad__note">—</span>
+        <div class="string-pad__header">
+          <span class="string-pad__name">String</span>
           <span id="string-scale" class="string-pad__scale"></span>
+        </div>
+        <button id="string-button" class="string-pad__button" type="button" aria-label="String note">
+          <span id="string-note" class="string-pad__note">—</span>
         </button>
       </section>
       <footer class="machine__footer">
@@ -45,6 +48,6 @@
         </span>
       </footer>
     </main>
-    <script type="module" src="app.js"></script>
+    <script type="module" src="app.js?v=__VERSION__"></script>
   </body>
 </html>

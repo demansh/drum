@@ -1,8 +1,8 @@
-import { INSTRUMENTS, createDefaultParams, createNoiseBuffer } from "./instruments.js";
-import { createKnob } from "./knob.js";
-import { clamp, fromPosition, toPosition } from "./param-scale.js";
-import { SCALE_NAME } from "./pentatonic.js";
-import { createStringPad } from "./string-pad.js";
+import { INSTRUMENTS, createDefaultParams, createNoiseBuffer } from "./instruments.js?v=__VERSION__";
+import { createKnob } from "./knob.js?v=__VERSION__";
+import { clamp, fromPosition, toPosition } from "./param-scale.js?v=__VERSION__";
+import { SCALE_NAME } from "./pentatonic.js?v=__VERSION__";
+import { createStringPad } from "./string-pad.js?v=__VERSION__";
 
 const STEP_COUNT = 16;
 const SCHEDULER_INTERVAL_MS = 25;

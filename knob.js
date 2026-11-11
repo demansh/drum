@@ -1,4 +1,4 @@
-import { clamp, fromPosition, toPosition } from "./param-scale.js";
+import { clamp, fromPosition, toPosition } from "./param-scale.js?v=__VERSION__";
 
 const DRAG_PIXELS_FOR_FULL_RANGE = 160;
 const FINE_DRAG_MULTIPLIER = 4;

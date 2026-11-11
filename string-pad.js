@@ -1,4 +1,4 @@
-import { PENTATONIC_NOTES, pickNextNoteIndex } from "./pentatonic.js";
+import { PENTATONIC_NOTES, pickNextNoteIndex } from "./pentatonic.js?v=__VERSION__";
 
 const PLUCK_DURATION_SECONDS = 3;
 const STRING_DAMPING = 0.996;

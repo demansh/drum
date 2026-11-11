@@ -75,7 +75,11 @@ input {
 }
 
 .controls > .control {
-  grid-column: span 3;
+  grid-column: span 2;
+}
+
+.control--knob {
+  align-items: center;
 }
 
 .controls > .button:not(#play-button) {
@@ -289,6 +293,51 @@ input[type="range"] {
 
 .step--current.step--active {
   transform: scale(0.9);
+}
+
+.string-pad {
+  margin-top: 16px;
+}
+
+.string-pad__button {
+  width: 100%;
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(var(--step-beat), var(--step));
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition: transform 0.05s, background 0.1s;
+}
+
+.string-pad__button--held {
+  background: var(--accent);
+  color: #111;
+  transform: scale(0.98);
+}
+
+.string-pad__label,
+.string-pad__scale {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.string-pad__note {
+  font-size: 2.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (hover: hover) and (pointer: fine) {

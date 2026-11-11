@@ -1,6 +1,8 @@
 import { INSTRUMENTS, createDefaultParams, createNoiseBuffer } from "./instruments.js";
 import { createKnob } from "./knob.js";
 import { clamp, fromPosition, toPosition } from "./param-scale.js";
+import { SCALE_NAME } from "./pentatonic.js";
+import { createStringPad } from "./string-pad.js";
 
 const STEP_COUNT = 16;
 const SCHEDULER_INTERVAL_MS = 25;
@@ -9,6 +11,17 @@ const STORAGE_KEY = "drum16.state";
 const DEFAULT_VOLUME = 0.8;
 const BPM_RANGE = { min: 60, max: 200 };
 const SWING_RANGE = { min: 0, max: 60 };
+const STRING_VOLUME = 0.8;
+
+const SKIP_SPEC = {
+  id: "skip",
+  label: "Skip",
+  min: 0,
+  max: 1,
+  default: 0,
+  scale: "linear",
+  format: (value) => `${Math.round(value * 100)}%`,
+};
 
 const TRACKS = INSTRUMENTS;
 
@@ -21,6 +34,7 @@ const DEFAULT_PATTERN = {
 const state = {
   bpm: 120,
   swing: 0,
+  skip: SKIP_SPEC.default,
   pattern: createEmptyPattern(),
   volumes: TRACKS.map(() => DEFAULT_VOLUME),
   params: TRACKS.map(createDefaultParams),
@@ -30,6 +44,7 @@ const audio = {
   context: null,
   noiseBuffer: null,
   trackGains: [],
+  stringGain: null,
 };
 
 const transport = {
@@ -51,6 +66,10 @@ const elements = {
   clearButton: document.getElementById("clear-button"),
   randomButton: document.getElementById("random-button"),
   shareButton: document.getElementById("share-button"),
+  skipKnobSlot: document.getElementById("skip-knob-slot"),
+  stringButton: document.getElementById("string-button"),
+  stringNote: document.getElementById("string-note"),
+  stringScale: document.getElementById("string-scale"),
   stepButtons: [],
 };
 
@@ -78,6 +97,10 @@ function ensureAudio() {
       gain.connect(compressor);
       return gain;
     });
+
+    audio.stringGain = audio.context.createGain();
+    audio.stringGain.gain.value = STRING_VOLUME;
+    audio.stringGain.connect(compressor);
   }
   if (audio.context.state === "suspended") {
     audio.context.resume().catch((error) => console.error("Failed to resume audio", error));
@@ -112,10 +135,14 @@ function getSwingOffsetSeconds(step) {
   return isOffbeat ? getStepDurationSeconds() * (state.swing / 100) * 0.5 : 0;
 }
 
+function shouldSkipHit() {
+  return state.skip > 0 && Math.random() < state.skip;
+}
+
 function scheduleStep(step, time) {
   const playTime = time + getSwingOffsetSeconds(step);
   state.pattern.forEach((steps, trackIndex) => {
-    if (steps[step]) {
+    if (steps[step] && !shouldSkipHit()) {
       triggerTrack(trackIndex, playTime);
     }
   });
@@ -214,7 +241,7 @@ function encodeSound() {
 }
 
 function encodeState() {
-  return [state.bpm, state.swing, encodePattern(), encodeSound()].join("-");
+  return [state.bpm, state.swing, encodePattern(), encodeSound(), Math.round(state.skip * 100)].join("-");
 }
 
 function decodePattern(patternText) {
@@ -247,11 +274,11 @@ function decodeSound(soundText) {
 }
 
 function decodeState(encoded) {
-  const match = /^(\d{2,3})-(\d{1,2})-([0-9a-f]+)(?:-([0-9a-f]+))?$/i.exec(encoded ?? "");
+  const match = /^(\d{2,3})-(\d{1,2})-([0-9a-f]+)(?:-([0-9a-f]+)(?:-(\d{1,3}))?)?$/i.exec(encoded ?? "");
   if (!match) {
     return null;
   }
-  const [, bpmText, swingText, patternText, soundText] = match;
+  const [, bpmText, swingText, patternText, soundText, skipText] = match;
   const pattern = decodePattern(patternText);
   if (!pattern) {
     return null;
@@ -259,6 +286,7 @@ function decodeState(encoded) {
   return {
     bpm: clamp(Number(bpmText), BPM_RANGE.min, BPM_RANGE.max),
     swing: clamp(Number(swingText), SWING_RANGE.min, SWING_RANGE.max),
+    skip: skipText ? clamp(Number(skipText), 0, 100) / 100 : SKIP_SPEC.default,
     pattern,
     ...decodeSound(soundText),
   };
@@ -479,7 +507,44 @@ function handleKeydown(event) {
   }
 }
 
+function mountSkipKnob() {
+  const knob = createKnob({
+    spec: SKIP_SPEC,
+    value: state.skip,
+    onInput: (value) => {
+      state.skip = value;
+    },
+    onCommit: persistState,
+  });
+  elements.skipKnobSlot.append(knob.element);
+}
+
+function mountStringPad() {
+  elements.stringScale.textContent = SCALE_NAME;
+  createStringPad({
+    button: elements.stringButton,
+    noteLabel: elements.stringNote,
+    getAudioOutput: () => ({ context: ensureAudio(), destination: audio.stringGain }),
+  });
+}
+
+function unlockAudioOnFirstGesture() {
+  const unlock = () => {
+    try {
+      ensureAudio();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+  ["pointerup", "keydown"].forEach((eventName) =>
+    document.addEventListener(eventName, unlock, { once: true, capture: true }),
+  );
+}
+
 function bindControls() {
+  mountSkipKnob();
+  mountStringPad();
+  unlockAudioOnFirstGesture();
   elements.playButton.addEventListener("click", togglePlayback);
   elements.bpmInput.addEventListener("input", () => {
     state.bpm = clamp(Number(elements.bpmInput.value), BPM_RANGE.min, BPM_RANGE.max);

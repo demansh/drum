@@ -21,17 +21,28 @@
             <span>Swing <output id="swing-value">0</output>%</span>
             <input id="swing-input" type="range" min="0" max="60" value="0" />
           </label>
+          <div id="skip-knob-slot" class="control control--knob"></div>
           <button id="clear-button" class="button" type="button">Clear</button>
           <button id="random-button" class="button" type="button">Random</button>
           <button id="share-button" class="button" type="button">Share</button>
         </div>
       </header>
       <section id="sequencer" class="sequencer" aria-label="Sequencer"></section>
+      <section class="string-pad" aria-label="String">
+        <button id="string-button" class="string-pad__button" type="button">
+          <span class="string-pad__label">String</span>
+          <span id="string-note" class="string-pad__note">—</span>
+          <span id="string-scale" class="string-pad__scale"></span>
+        </button>
+      </section>
       <footer class="machine__footer">
         <span class="hint--keyboard">
-          Space — play/stop · 1–6 — звук · ⚙ — крутилки: тяни вверх/вниз, Shift — точнее, двойной клик — сброс
+          Space — play/stop · 1–6 — звук · ⚙ — крутилки: тяни вверх/вниз, Shift — точнее, двойной клик — сброс ·
+          String — держи и отпускай, каждое нажатие — новая нота
         </span>
-        <span class="hint--touch">Тап по названию — превью · ⚙ — крутилки: тяни вверх/вниз, двойной тап — сброс</span>
+        <span class="hint--touch">
+          Тап по названию — превью · ⚙ — крутилки: тяни вверх/вниз, двойной тап — сброс · String — держи и отпускай
+        </span>
       </footer>
     </main>
     <script type="module" src="app.js"></script>

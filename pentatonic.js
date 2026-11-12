@@ -37,7 +37,7 @@ function buildScaleNotes(rootMidiNote, octaveCount, intervals) {
 
 export const PENTATONIC_NOTES = buildScaleNotes(ROOT_MIDI_NOTE, OCTAVE_COUNT, MINOR_PENTATONIC_INTERVALS);
 
-const STARTING_NOTE_INDEX = MINOR_PENTATONIC_INTERVALS.length;
+export const ROOT_NOTE_INDEX = MINOR_PENTATONIC_INTERVALS.length;
 
 function pickStepDelta(random) {
   let threshold = random() * TOTAL_STEP_WEIGHT;
@@ -52,7 +52,7 @@ function pickStepDelta(random) {
 
 export function pickNextNoteIndex(currentIndex, random = Math.random) {
   if (currentIndex === null) {
-    return STARTING_NOTE_INDEX;
+    return ROOT_NOTE_INDEX;
   }
   const lastIndex = PENTATONIC_NOTES.length - 1;
   const delta = pickStepDelta(random);
@@ -60,4 +60,8 @@ export function pickNextNoteIndex(currentIndex, random = Math.random) {
   const isOutOfRange = candidateIndex < 0 || candidateIndex > lastIndex;
   const nextIndex = isOutOfRange ? currentIndex - delta : candidateIndex;
   return Math.min(lastIndex, Math.max(0, nextIndex));
+}
+
+export function nextNoteIndexUp(currentIndex) {
+  return (currentIndex + 1) % PENTATONIC_NOTES.length;
 }

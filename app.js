@@ -1,17 +1,25 @@
 import { INSTRUMENTS, createDefaultParams, createNoiseBuffer } from "./instruments.js?v=__VERSION__";
-import { createKnob } from "./knob.js?v=__VERSION__";
+import { createFader } from "./fader.js?v=__VERSION__";
 import { clamp, fromPosition, toPosition } from "./param-scale.js?v=__VERSION__";
-import { SCALE_NAME } from "./pentatonic.js?v=__VERSION__";
-import { createStringPad } from "./string-pad.js?v=__VERSION__";
+import {
+  PENTATONIC_NOTES,
+  ROOT_NOTE_INDEX,
+  SCALE_NAME,
+  nextNoteIndexUp,
+  pickNextNoteIndex,
+} from "./pentatonic.js?v=__VERSION__";
+import { bindTapAndLongPress } from "./step-gestures.js?v=__VERSION__";
 
 const STEP_COUNT = 16;
 const SCHEDULER_INTERVAL_MS = 25;
 const SCHEDULE_AHEAD_SECONDS = 0.1;
-const STORAGE_KEY = "drum16.state";
+const STORAGE_KEY = "drum16.state.v2";
 const DEFAULT_VOLUME = 0.8;
 const BPM_RANGE = { min: 60, max: 200 };
 const SWING_RANGE = { min: 0, max: 60 };
-const STRING_VOLUME = 0.8;
+const EMPTY_STEP = null;
+const DRUM_HIT = 0;
+const ENCODED_STATE_PATTERN = /^(\d{2,3})-(\d{1,2})-([0-9a-f]+)-([0-9a-f]+)-(\d{1,3})-([0-9a-f]+)$/i;
 
 const SKIP_SPEC = {
   id: "skip",
@@ -24,12 +32,16 @@ const SKIP_SPEC = {
 };
 
 const TRACKS = INSTRUMENTS;
+const isMelodic = (track) => track.kind === "melodic";
 
 const DEFAULT_PATTERN = {
   kick: [0, 4, 8, 12],
   snare: [4, 12],
   hat: [0, 2, 4, 6, 8, 10, 12, 14],
+  string: { 0: 5, 3: 4, 6: 5, 10: 7, 14: 6 },
 };
+
+const RANDOM_DENSITY = { kick: 0.3, snare: 0.15, clap: 0.1, hat: 0.6, openhat: 0.1, tom: 0.1, string: 0.3 };
 
 const state = {
   bpm: 120,
@@ -40,11 +52,14 @@ const state = {
   params: TRACKS.map(createDefaultParams),
 };
 
+const editor = {
+  lastNoteIndexByTrack: TRACKS.map(() => ROOT_NOTE_INDEX),
+};
+
 const audio = {
   context: null,
   noiseBuffer: null,
   trackGains: [],
-  stringGain: null,
 };
 
 const transport = {
@@ -66,15 +81,12 @@ const elements = {
   clearButton: document.getElementById("clear-button"),
   randomButton: document.getElementById("random-button"),
   shareButton: document.getElementById("share-button"),
-  skipKnobSlot: document.getElementById("skip-knob-slot"),
-  stringButton: document.getElementById("string-button"),
-  stringNote: document.getElementById("string-note"),
-  stringScale: document.getElementById("string-scale"),
+  skipFaderSlot: document.getElementById("skip-fader-slot"),
   stepButtons: [],
 };
 
 function createEmptyPattern() {
-  return TRACKS.map(() => new Array(STEP_COUNT).fill(false));
+  return TRACKS.map(() => new Array(STEP_COUNT).fill(EMPTY_STEP));
 }
 
 function ensureAudio() {
@@ -97,10 +109,6 @@ function ensureAudio() {
       gain.connect(compressor);
       return gain;
     });
-
-    audio.stringGain = audio.context.createGain();
-    audio.stringGain.gain.value = STRING_VOLUME;
-    audio.stringGain.connect(compressor);
   }
   if (audio.context.state === "suspended") {
     audio.context.resume().catch((error) => console.error("Failed to resume audio", error));
@@ -108,19 +116,20 @@ function ensureAudio() {
   return audio.context;
 }
 
-function triggerTrack(trackIndex, time) {
+function triggerTrack(trackIndex, time, noteIndex) {
   const context = ensureAudio();
   TRACKS[trackIndex].play(context, {
     destination: audio.trackGains[trackIndex],
     time: time ?? context.currentTime,
     noiseBuffer: audio.noiseBuffer,
     params: state.params[trackIndex],
+    note: PENTATONIC_NOTES[noteIndex ?? editor.lastNoteIndexByTrack[trackIndex]],
   });
 }
 
-function previewTrack(trackIndex) {
+function previewTrack(trackIndex, noteIndex) {
   try {
-    triggerTrack(trackIndex);
+    triggerTrack(trackIndex, undefined, noteIndex);
   } catch (error) {
     console.error(error);
   }
@@ -142,8 +151,9 @@ function shouldSkipHit() {
 function scheduleStep(step, time) {
   const playTime = time + getSwingOffsetSeconds(step);
   state.pattern.forEach((steps, trackIndex) => {
-    if (steps[step] && !shouldSkipHit()) {
-      triggerTrack(trackIndex, playTime);
+    const stepValue = steps[step];
+    if (stepValue !== EMPTY_STEP && !shouldSkipHit()) {
+      triggerTrack(trackIndex, playTime, stepValue);
     }
   });
   transport.visualQueue.push({ step, time: playTime });
@@ -224,10 +234,16 @@ function encodePattern() {
   return state.pattern
     .map((steps) =>
       steps
-        .reduce((bits, isActive, index) => (isActive ? bits | (1 << index) : bits), 0)
+        .reduce((bits, stepValue, index) => (stepValue === EMPTY_STEP ? bits : bits | (1 << index)), 0)
         .toString(16)
         .padStart(4, "0"),
     )
+    .join("");
+}
+
+function encodeNotes() {
+  return TRACKS.filter(isMelodic)
+    .map((track) => state.pattern[TRACKS.indexOf(track)].map((stepValue) => (stepValue ?? 0).toString(16)).join(""))
     .join("");
 }
 
@@ -241,22 +257,42 @@ function encodeSound() {
 }
 
 function encodeState() {
-  return [state.bpm, state.swing, encodePattern(), encodeSound(), Math.round(state.skip * 100)].join("-");
+  return [
+    state.bpm,
+    state.swing,
+    encodePattern(),
+    encodeSound(),
+    Math.round(state.skip * 100),
+    encodeNotes(),
+  ].join("-");
 }
 
-function decodePattern(patternText) {
-  if (patternText.length !== TRACKS.length * 4) {
+function decodePattern(patternText, notesText) {
+  const melodicTrackCount = TRACKS.filter(isMelodic).length;
+  if (patternText.length !== TRACKS.length * 4 || notesText.length !== melodicTrackCount * STEP_COUNT) {
     return null;
   }
-  return TRACKS.map((_, trackIndex) => {
+  const lastNoteIndex = PENTATONIC_NOTES.length - 1;
+  let notesOffset = 0;
+  return TRACKS.map((track, trackIndex) => {
     const bits = parseInt(patternText.slice(trackIndex * 4, trackIndex * 4 + 4), 16);
-    return Array.from({ length: STEP_COUNT }, (_, step) => (bits & (1 << step)) !== 0);
+    let noteDigits = "";
+    if (isMelodic(track)) {
+      noteDigits = notesText.slice(notesOffset, notesOffset + STEP_COUNT);
+      notesOffset += STEP_COUNT;
+    }
+    return Array.from({ length: STEP_COUNT }, (_, step) => {
+      if ((bits & (1 << step)) === 0) {
+        return EMPTY_STEP;
+      }
+      return isMelodic(track) ? clamp(parseInt(noteDigits[step], 16), 0, lastNoteIndex) : DRUM_HIT;
+    });
   });
 }
 
 function decodeSound(soundText) {
   const expectedLength = TRACKS.reduce((total, track) => total + (1 + track.params.length) * 2, 0);
-  if (!soundText || soundText.length !== expectedLength) {
+  if (soundText.length !== expectedLength) {
     return null;
   }
   let offset = 0;
@@ -274,19 +310,19 @@ function decodeSound(soundText) {
 }
 
 function decodeState(encoded) {
-  const match = /^(\d{2,3})-(\d{1,2})-([0-9a-f]+)(?:-([0-9a-f]+)(?:-(\d{1,3}))?)?$/i.exec(encoded ?? "");
+  const match = ENCODED_STATE_PATTERN.exec(encoded ?? "");
   if (!match) {
     return null;
   }
-  const [, bpmText, swingText, patternText, soundText, skipText] = match;
-  const pattern = decodePattern(patternText);
+  const [, bpmText, swingText, patternText, soundText, skipText, notesText] = match;
+  const pattern = decodePattern(patternText, notesText);
   if (!pattern) {
     return null;
   }
   return {
     bpm: clamp(Number(bpmText), BPM_RANGE.min, BPM_RANGE.max),
     swing: clamp(Number(swingText), SWING_RANGE.min, SWING_RANGE.max),
-    skip: skipText ? clamp(Number(skipText), 0, 100) / 100 : SKIP_SPEC.default,
+    skip: clamp(Number(skipText), 0, 100) / 100,
     pattern,
     ...decodeSound(soundText),
   };
@@ -321,13 +357,20 @@ function loadInitialState() {
 
 function applyDefaultPattern() {
   TRACKS.forEach((track, trackIndex) => {
-    (DEFAULT_PATTERN[track.id] ?? []).forEach((step) => {
-      state.pattern[trackIndex][step] = true;
-    });
+    const preset = DEFAULT_PATTERN[track.id];
+    if (Array.isArray(preset)) {
+      preset.forEach((step) => {
+        state.pattern[trackIndex][step] = DRUM_HIT;
+      });
+    } else if (preset) {
+      Object.entries(preset).forEach(([step, noteIndex]) => {
+        state.pattern[trackIndex][Number(step)] = noteIndex;
+      });
+    }
   });
 }
 
-function createTrackHeader(track, trackIndex, knobsPanel) {
+function createTrackHeader(track, trackIndex, soundPanel) {
   const header = document.createElement("div");
   header.className = "track__header";
 
@@ -335,6 +378,9 @@ function createTrackHeader(track, trackIndex, knobsPanel) {
   nameButton.type = "button";
   nameButton.className = "track__name";
   nameButton.textContent = track.name;
+  if (isMelodic(track)) {
+    nameButton.title = SCALE_NAME;
+  }
   nameButton.addEventListener("click", () => previewTrack(trackIndex));
 
   const volumeInput = document.createElement("input");
@@ -353,11 +399,11 @@ function createTrackHeader(track, trackIndex, knobsPanel) {
   soundToggle.className = "track__toggle";
   soundToggle.textContent = "⚙︎";
   soundToggle.setAttribute("aria-label", `${track.name} sound settings`);
-  soundToggle.setAttribute("aria-controls", knobsPanel.id);
+  soundToggle.setAttribute("aria-controls", soundPanel.id);
   soundToggle.setAttribute("aria-expanded", "false");
   soundToggle.addEventListener("click", () => {
-    const isExpanded = knobsPanel.hidden;
-    knobsPanel.hidden = !isExpanded;
+    const isExpanded = soundPanel.hidden;
+    soundPanel.hidden = !isExpanded;
     soundToggle.setAttribute("aria-expanded", String(isExpanded));
   });
 
@@ -365,13 +411,13 @@ function createTrackHeader(track, trackIndex, knobsPanel) {
   return header;
 }
 
-function createKnobsPanel(track, trackIndex) {
+function createSoundPanel(track, trackIndex) {
   const panel = document.createElement("div");
-  panel.className = "track__knobs";
-  panel.id = `knobs-${track.id}`;
+  panel.className = "track__sound";
+  panel.id = `sound-${track.id}`;
   panel.hidden = true;
   track.params.forEach((spec) => {
-    const knob = createKnob({
+    const fader = createFader({
       spec,
       value: state.params[trackIndex][spec.id],
       onInput: (value) => {
@@ -384,25 +430,33 @@ function createKnobsPanel(track, trackIndex) {
         }
       },
     });
-    panel.append(knob.element);
+    panel.append(fader.element);
   });
   return panel;
+}
+
+function createStepButton(track, trackIndex, step) {
+  const stepButton = document.createElement("button");
+  stepButton.type = "button";
+  stepButton.className = "step";
+  stepButton.classList.toggle("step--beat", step % 4 === 0);
+  if (isMelodic(track)) {
+    bindTapAndLongPress(stepButton, {
+      onTap: () => tapMelodicStep(trackIndex, step),
+      onLongPress: () => clearMelodicStep(trackIndex, step),
+      pressingClassName: "step--pressing",
+    });
+  } else {
+    stepButton.addEventListener("click", () => toggleDrumStep(trackIndex, step));
+  }
+  return stepButton;
 }
 
 function createStepsContainer(track, trackIndex) {
   const container = document.createElement("div");
   container.className = "track__steps";
-  const stepRow = [];
-  for (let step = 0; step < STEP_COUNT; step++) {
-    const stepButton = document.createElement("button");
-    stepButton.type = "button";
-    stepButton.className = "step";
-    stepButton.classList.toggle("step--beat", step % 4 === 0);
-    stepButton.setAttribute("aria-label", `${track.name} step ${step + 1}`);
-    stepButton.addEventListener("click", () => toggleStep(trackIndex, step));
-    stepRow.push(stepButton);
-    container.append(stepButton);
-  }
+  const stepRow = Array.from({ length: STEP_COUNT }, (_, step) => createStepButton(track, trackIndex, step));
+  container.append(...stepRow);
   elements.stepButtons.push(stepRow);
   return container;
 }
@@ -412,24 +466,34 @@ function renderSequencer() {
   TRACKS.forEach((track, trackIndex) => {
     const row = document.createElement("div");
     row.className = "track";
-    const knobsPanel = createKnobsPanel(track, trackIndex);
+    row.classList.toggle("track--melodic", isMelodic(track));
+    const soundPanel = createSoundPanel(track, trackIndex);
     row.append(
-      createTrackHeader(track, trackIndex, knobsPanel),
+      createTrackHeader(track, trackIndex, soundPanel),
       createStepsContainer(track, trackIndex),
-      knobsPanel,
+      soundPanel,
     );
     fragment.append(row);
   });
   elements.sequencer.replaceChildren(fragment);
 }
 
+function renderStep(trackIndex, step) {
+  const track = TRACKS[trackIndex];
+  const stepValue = state.pattern[trackIndex][step];
+  const isActive = stepValue !== EMPTY_STEP;
+  const button = elements.stepButtons[trackIndex][step];
+  button.classList.toggle("step--active", isActive);
+  button.setAttribute("aria-pressed", String(isActive));
+
+  const noteName = isMelodic(track) && isActive ? PENTATONIC_NOTES[stepValue].name : "";
+  button.textContent = noteName;
+  button.setAttribute("aria-label", `${track.name} step ${step + 1}${noteName ? `, ${noteName}` : ""}`);
+}
+
 function renderPattern() {
   state.pattern.forEach((steps, trackIndex) => {
-    steps.forEach((isActive, step) => {
-      const button = elements.stepButtons[trackIndex][step];
-      button.classList.toggle("step--active", isActive);
-      button.setAttribute("aria-pressed", String(isActive));
-    });
+    steps.forEach((_, step) => renderStep(trackIndex, step));
   });
 }
 
@@ -440,13 +504,34 @@ function renderControls() {
   elements.swingValue.textContent = String(state.swing);
 }
 
-function toggleStep(trackIndex, step) {
-  const isActive = !state.pattern[trackIndex][step];
-  state.pattern[trackIndex][step] = isActive;
-  renderPattern();
+function setStep(trackIndex, step, stepValue) {
+  state.pattern[trackIndex][step] = stepValue;
+  renderStep(trackIndex, step);
   persistState();
+}
+
+function toggleDrumStep(trackIndex, step) {
+  const isActive = state.pattern[trackIndex][step] === EMPTY_STEP;
+  setStep(trackIndex, step, isActive ? DRUM_HIT : EMPTY_STEP);
   if (isActive && !transport.isPlaying) {
     previewTrack(trackIndex);
+  }
+}
+
+function tapMelodicStep(trackIndex, step) {
+  const currentValue = state.pattern[trackIndex][step];
+  const noteIndex =
+    currentValue === EMPTY_STEP ? editor.lastNoteIndexByTrack[trackIndex] : nextNoteIndexUp(currentValue);
+  editor.lastNoteIndexByTrack[trackIndex] = noteIndex;
+  setStep(trackIndex, step, noteIndex);
+  if (!transport.isPlaying) {
+    previewTrack(trackIndex, noteIndex);
+  }
+}
+
+function clearMelodicStep(trackIndex, step) {
+  if (state.pattern[trackIndex][step] !== EMPTY_STEP) {
+    setStep(trackIndex, step, EMPTY_STEP);
   }
 }
 
@@ -463,12 +548,24 @@ function clearPattern() {
   persistState();
 }
 
+function createRandomSteps(track) {
+  const density = RANDOM_DENSITY[track.id] ?? 0.2;
+  let noteIndex = null;
+  return Array.from({ length: STEP_COUNT }, () => {
+    if (Math.random() >= density) {
+      return EMPTY_STEP;
+    }
+    if (!isMelodic(track)) {
+      return DRUM_HIT;
+    }
+    noteIndex = pickNextNoteIndex(noteIndex);
+    return noteIndex;
+  });
+}
+
 function randomizePattern() {
-  const densityByTrack = { kick: 0.3, snare: 0.15, clap: 0.1, hat: 0.6, openhat: 0.1, tom: 0.1 };
-  state.pattern = TRACKS.map((track) =>
-    Array.from({ length: STEP_COUNT }, () => Math.random() < (densityByTrack[track.id] ?? 0.2)),
-  );
-  state.pattern[0][0] = true;
+  state.pattern = TRACKS.map(createRandomSteps);
+  state.pattern[0][0] = DRUM_HIT;
   renderPattern();
   persistState();
 }
@@ -507,8 +604,8 @@ function handleKeydown(event) {
   }
 }
 
-function mountSkipKnob() {
-  const knob = createKnob({
+function mountSkipFader() {
+  const fader = createFader({
     spec: SKIP_SPEC,
     value: state.skip,
     onInput: (value) => {
@@ -516,16 +613,7 @@ function mountSkipKnob() {
     },
     onCommit: persistState,
   });
-  elements.skipKnobSlot.append(knob.element);
-}
-
-function mountStringPad() {
-  elements.stringScale.textContent = SCALE_NAME;
-  createStringPad({
-    button: elements.stringButton,
-    noteLabel: elements.stringNote,
-    getAudioOutput: () => ({ context: ensureAudio(), destination: audio.stringGain }),
-  });
+  elements.skipFaderSlot.append(fader.element);
 }
 
 function unlockAudioOnFirstGesture() {
@@ -542,8 +630,7 @@ function unlockAudioOnFirstGesture() {
 }
 
 function bindControls() {
-  mountSkipKnob();
-  mountStringPad();
+  mountSkipFader();
   unlockAudioOnFirstGesture();
   elements.playButton.addEventListener("click", togglePlayback);
   elements.bpmInput.addEventListener("input", () => {

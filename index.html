@@ -22,29 +22,21 @@
             <span>Swing <output id="swing-value">0</output>%</span>
             <input id="swing-input" type="range" min="0" max="60" value="0" />
           </label>
-          <div id="skip-knob-slot" class="control control--knob"></div>
+          <div id="skip-fader-slot" class="control control--fader"></div>
           <button id="clear-button" class="button" type="button">Clear</button>
           <button id="random-button" class="button" type="button">Random</button>
           <button id="share-button" class="button" type="button">Share</button>
         </div>
       </header>
       <section id="sequencer" class="sequencer" aria-label="Sequencer"></section>
-      <section class="string-pad" aria-label="String">
-        <div class="string-pad__header">
-          <span class="string-pad__name">String</span>
-          <span id="string-scale" class="string-pad__scale"></span>
-        </div>
-        <button id="string-button" class="string-pad__button" type="button" aria-label="String note">
-          <span id="string-note" class="string-pad__note">—</span>
-        </button>
-      </section>
       <footer class="machine__footer">
         <span class="hint--keyboard">
-          Space — play/stop · 1–6 — звук · ⚙ — крутилки: тяни вверх/вниз, Shift — точнее, двойной клик — сброс ·
-          String — держи и отпускай, каждое нажатие — новая нота
+          Space — play/stop · 1–7 — звук · ⚙ — ползунки звука, двойной клик — сброс ·
+          String: клик — нота, клик по ноте — выше по пентатонике, долгое нажатие или Delete — убрать
         </span>
         <span class="hint--touch">
-          Тап по названию — превью · ⚙ — крутилки: тяни вверх/вниз, двойной тап — сброс · String — держи и отпускай
+          ⚙ — ползунки звука, двойной тап — сброс ·
+          String: тап — нота, тап по ноте — выше по пентатонике, долгое нажатие — убрать
         </span>
       </footer>
     </main>

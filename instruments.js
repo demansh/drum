@@ -2,7 +2,7 @@ const SILENCE = 0.001;
 
 const formatFrequency = (value) =>
   value >= 1000 ? `${(value / 1000).toFixed(1)} kHz` : `${Math.round(value)} Hz`;
-const formatDuration = (value) => `${Math.round(value * 1000)} ms`;
+const formatDuration = (value) => (value >= 1 ? `${value.toFixed(1)} s` : `${Math.round(value * 1000)} ms`);
 const formatPercent = (value) => `${Math.round(value * 100)}%`;
 
 const frequencyParam = (id, label, min, max, defaultValue) => ({
@@ -141,6 +141,52 @@ function playTom(context, { destination, time, params }) {
   });
 }
 
+const STRING_PEAK_LEVEL = 0.8;
+const STRING_CHOKE_TIME_CONSTANT_SECONDS = 0.015;
+const STRING_CHOKE_STOP_DELAY_SECONDS = 0.1;
+const STRING_MAX_EXCITATION_SMOOTHING = 0.9;
+
+function createPluckBuffer(context, frequency, decaySeconds, brightness) {
+  const { sampleRate } = context;
+  const length = Math.ceil(sampleRate * decaySeconds);
+  const buffer = context.createBuffer(1, length, sampleRate);
+  const data = buffer.getChannelData(0);
+  const period = Math.max(2, Math.round(sampleRate / frequency));
+  const loopGain = SILENCE ** (1 / (decaySeconds * frequency));
+  const excitationSmoothing = STRING_MAX_EXCITATION_SMOOTHING * (1 - brightness);
+
+  let previousSample = 0;
+  for (let i = 0; i < Math.min(period, length); i++) {
+    previousSample = (1 - excitationSmoothing) * (Math.random() * 2 - 1) + excitationSmoothing * previousSample;
+    data[i] = previousSample;
+  }
+  for (let i = period; i < length; i++) {
+    const olderSample = i - period - 1 >= 0 ? data[i - period - 1] : data[i - period];
+    data[i] = loopGain * 0.5 * (data[i - period] + olderSample);
+  }
+  return buffer;
+}
+
+function createStringPlayer() {
+  let ringingVoice = null;
+
+  return function playString(context, { destination, time, params, note }) {
+    if (ringingVoice && ringingVoice.endTime > time) {
+      ringingVoice.gain.gain.setTargetAtTime(0, time, STRING_CHOKE_TIME_CONSTANT_SECONDS);
+      ringingVoice.source.stop(time + STRING_CHOKE_STOP_DELAY_SECONDS);
+    }
+
+    const source = context.createBufferSource();
+    source.buffer = createPluckBuffer(context, note.frequency, params.decay, params.tone);
+    const gain = context.createGain();
+    gain.gain.value = STRING_PEAK_LEVEL;
+    source.connect(gain).connect(destination);
+    source.start(time);
+
+    ringingVoice = { source, gain, endTime: time + params.decay };
+  };
+}
+
 export const INSTRUMENTS = [
   {
     id: "kick",
@@ -206,6 +252,14 @@ export const INSTRUMENTS = [
       durationParam("decay", "Decay", 0.1, 1.2, 0.35),
       percentParam("bend", "Bend", 0, 0.8, 0.55),
     ],
+  },
+  {
+    id: "string",
+    name: "String",
+    key: "7",
+    kind: "melodic",
+    play: createStringPlayer(),
+    params: [percentParam("tone", "Tone", 0, 1, 0.5), durationParam("decay", "Decay", 0.3, 4, 2)],
   },
 ];
 
